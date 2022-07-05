@@ -6,10 +6,6 @@
 #include <ctime>
 #include <mutex>
 
-std::mutex mtx_1;
-std::mutex mtx_2;
-std::mutex mtx_3;
-
 enum Food {
     PIZZA,
     SOUP,
@@ -40,54 +36,82 @@ std::string returnStringFood(Food food) {
     return {};
 }
 
-int successOrder = 0;
-
-void getOrder(std::vector<Food>& uncookedFood) {
-    while (successOrder < 10) {
-        std::srand(std::time(nullptr));
-        std::this_thread::sleep_for(std::chrono::seconds(std::rand() % 6 + 5));
-
-        mtx_1.lock();
-        Food tempFood = returnFood(std::rand() % 5);
-        uncookedFood.push_back(tempFood);
-        std::cout << returnStringFood(tempFood) << " was ordered" << std::endl;
-        mtx_1.unlock();
-    }
-}
-
-void cookOrder(std::vector<Food>& uncookedFood, std::vector<Food>& cookedFood) {
-    while (successOrder < 10) {
-        mtx_2.lock();
-        std::this_thread::sleep_for(std::chrono::seconds(std::rand() % 11 + 5));
-        if (uncookedFood.empty()) return;
-        Food tempFood = uncookedFood[0];
-        uncookedFood.erase(uncookedFood.begin());
-        cookedFood.push_back(tempFood);
-
-        std::cout << returnStringFood(tempFood) << " was cooked" << std::endl;
-        mtx_2.unlock();
-    }
-}
-
-int main() {
+class OnlineDelivery {
     std::vector<Food> uncookedFood;
     std::vector<Food> cookedFood;
-    
-    std::thread get(getOrder, std::ref(uncookedFood));
-    std::thread cook(cookOrder, std::ref(uncookedFood), std::ref(cookedFood));
 
-    while (successOrder < 10) {
-        std::this_thread::sleep_for(std::chrono::seconds(30));
-        mtx_3.lock();
-        for (int i = 0; i < cookedFood.size(); i++) {
-            std::cout << returnStringFood(cookedFood[i]) << " was delivered" << std::endl;
-            successOrder++;
+    int successOrder = 0;
+
+    std::mutex mtx1;
+    std::mutex mtx2;
+
+public:
+    void getOrder() {
+        while (successOrder < 10) {
+            std::srand(std::time(nullptr));
+            std::this_thread::sleep_for(std::chrono::seconds(std::rand() % 6 + 5));
+
+            mtx1.lock();
+            Food tempFood = returnFood(std::rand() % 5);
+            uncookedFood.push_back(tempFood);
+            std::cout << returnStringFood(tempFood) << " was ordered" << std::endl;
+            mtx1.unlock();
         }
-        cookedFood.clear();
-        mtx_3.unlock();
     }
-    get.join();
-    cook.detach();
+
+    void cookOrder() {
+        while (successOrder < 10) {
+            mtx1.lock();
+            if (uncookedFood.empty()) {
+                mtx1.unlock();
+                continue;
+            } 
+            std::this_thread::sleep_for(std::chrono::seconds(std::rand() % 11 + 5));
+            Food tempFood = uncookedFood[0];
+            uncookedFood.erase(uncookedFood.begin());
+            mtx1.unlock();
+
+            mtx2.lock();
+            cookedFood.push_back(tempFood);
+            std::cout << returnStringFood(tempFood) << " was cooked" << std::endl;
+            mtx2.unlock();
+        }
+    }
+
+    void deliveryOrders() {
+        while (successOrder < 10) {
+            mtx2.lock();
+            if (cookedFood.empty()) {
+                mtx2.unlock();
+                continue;
+            }
+            std::vector<Food> tempVec = cookedFood;
+            cookedFood.clear();
+            mtx2.unlock();
+
+            std::this_thread::sleep_for(std::chrono::seconds(30));
+            for (int i = 0; i < tempVec.size(); i++) {
+                std::cout << returnStringFood(tempVec[i]) << " was delivered" << std::endl;
+                successOrder++;
+            }
+        }
+    }
+};
+
+int main() {
+    OnlineDelivery* onlineDelivery = new OnlineDelivery;
+
+    std::thread orderThread(&OnlineDelivery::getOrder, std::ref(onlineDelivery));
+
+    std::thread kitchenThread(&OnlineDelivery::cookOrder, std::ref(onlineDelivery));
+
+    std::thread deliveryThread(&OnlineDelivery::deliveryOrders, std::ref(onlineDelivery));
+
+    orderThread.join();
+    kitchenThread.detach();
+    deliveryThread.join();
+
+    delete onlineDelivery;
 }
 
 /*
