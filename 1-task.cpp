@@ -2,7 +2,11 @@
 #include <string>
 #include <map>
 #include <thread>
+#include <functional>
+#include <mutex>
 #include <chrono>
+
+
 
 class Swimmer {
     std::string name = "";
@@ -11,30 +15,49 @@ class Swimmer {
 
     float distance = 0;
 
-    public:
-        void setName() {
-            std::cout << "Input name of swimmer: ";
-            std::cin >> name;
-        }
-        std::string getName() {
-            return name;
-        }
+    std::thread driveway;
 
-        void setSpeedMS() {
-            std::cout << "Input speed in meter per second: ";
-            std::cin >> speedMS;
-        }
-        float getSpeedMS() {
-            return speedMS;
-        }
+public:
+    void setName() {
+        std::cout << "Input name of swimmer: ";
+        std::cin >> name;
+    }
+    std::string getName() {
+        return name;
+    }
 
-        void setDistance() {
+    void setSpeedMS() {
+        std::cout << "Input speed in meter per second: ";
+        std::cin >> speedMS;
+    }
+    float getSpeedMS() {
+        return speedMS;
+    }
+
+    void setDistance() {
+        while (distance < 100) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
             distance += speedMS;
-            if (distance > 100) distance = 100;
+            if (distance > 100) {
+                distance = 100;
+                return;
+            }
         }
-        float getDistance() {
-            return distance;
-        }
+    }
+
+    float getDistance() {
+        return distance;
+    }
+
+    void startSwim() {
+        driveway = std::thread(std::bind(&setDistance, this));
+    }
+
+    ~Swimmer() {
+        if (driveway.joinable()) {
+            driveway.join();
+        } 
+    }
 };
 
 bool is_finish(Swimmer swimmer[6]) {
@@ -70,15 +93,16 @@ int main() {
         swimmer[i].setSpeedMS();
     }
 
+    for (int i = 0; i < 6; i++) {
+        swimmer[i].startSwim();
+    }
+
     while(!is_finish(swimmer)) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
-        for (int i = 0; i < 6; i++) {
-            swimmer[i].setDistance();
-        }
         showLeaderboard(swimmer);
         std::cout << std::endl;
     }
-
+    
     totalLeaderboard(swimmer);
 
     delete[] swimmer;
