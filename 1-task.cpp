@@ -1,21 +1,25 @@
 #include <iostream>
+#include <algorithm>
+#include <vector>
 #include <string>
-#include <map>
 #include <thread>
 #include <functional>
 #include <mutex>
 #include <chrono>
 
 
-
 class Swimmer {
     std::string name = "";
+
+    int timeSec = 0;
 
     float speedMS = 0;
 
     float distance = 0;
 
     std::thread driveway;
+
+    static std::mutex mtx;
 
 public:
     void setName() {
@@ -38,11 +42,24 @@ public:
         while (distance < 100) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
             distance += speedMS;
-            if (distance > 100) {
+            timeSec++;
+            if (distance >= 100) {
                 distance = 100;
+                mtx.lock();
+                std::cout << name << " just finished with time: " << timeSec << std::endl;
+                mtx.unlock();
                 return;
             }
+            else {
+                mtx.lock();
+                std::cout << name << " swam " << distance << " metres" << std::endl;
+                mtx.unlock();
+            }
         }
+    }
+
+    int getTime() {
+        return timeSec;
     }
 
     float getDistance() {
@@ -50,62 +67,49 @@ public:
     }
 
     void startSwim() {
-        driveway = std::thread(std::bind(&setDistance, this));
+        driveway = std::thread(std::bind(&Swimmer::setDistance, this));
     }
 
-    ~Swimmer() {
-        if (driveway.joinable()) {
-            driveway.join();
-        } 
+    void joinThread() {
+        driveway.join();
     }
 };
 
-bool is_finish(Swimmer swimmer[6]) {
-    for (int i = 0; i < 6; i++) {
-        if (swimmer[i].getDistance() < 100) return false;
-    }
-    return true;
-}
-
-void showLeaderboard(Swimmer swimmer[6]) {
-    for (int i = 0; i < 6; i++) {
-        std::cout << swimmer[i].getName() << " swam " << swimmer[i].getDistance() << " metres" << std::endl;
-    }
-}
-
-void totalLeaderboard(Swimmer swimmer[6]) {
-    std::map<float, std::string> leaderboard;
-    for (int i = 0; i < 6; i++) {
-        leaderboard.insert(std::pair<float, std::string>(swimmer[i].getDistance() / swimmer[i].getSpeedMS(), swimmer[i].getName()));
-    }
-    int i = 0;
-    for (auto it: leaderboard) {
-        std::cout << i + 1 << ": " << it.second << " with time " << it.first << " sec" << std::endl;
-        i++;
-    }
-}
+std::mutex Swimmer::mtx;
 
 int main() {
-    Swimmer* swimmer = new Swimmer[6];
-    
+    std::vector<Swimmer*> swimmer;
     for (int i = 0; i < 6; i++) {
-        swimmer[i].setName();
-        swimmer[i].setSpeedMS();
-    }
-
-    for (int i = 0; i < 6; i++) {
-        swimmer[i].startSwim();
-    }
-
-    while(!is_finish(swimmer)) {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-        showLeaderboard(swimmer);
-        std::cout << std::endl;
+        Swimmer* tempObj = new Swimmer();
+        swimmer.push_back(tempObj);
     }
     
-    totalLeaderboard(swimmer);
+    for (auto &s: swimmer) {
+        s->setName();
+        s->setSpeedMS();
+    }
 
-    delete[] swimmer;
+    for (auto &s: swimmer) {
+        s->startSwim();
+    }
+
+    for (auto &s: swimmer) {
+        s->joinThread();
+    }
+
+    std::sort(swimmer.begin(), swimmer.end(), [](Swimmer* firstPtr, Swimmer* secondPtr) {
+        return firstPtr->getTime() < secondPtr->getTime();
+    });
+
+    int i = 0;
+    for (auto &s: swimmer) {
+        std::cout << i + 1 << ": " << s->getName() << " with time " << s->getTime() << " sec" << std::endl;
+        i++;
+    }
+
+    for (auto &s: swimmer) {
+        delete s;
+    }
 }
 
 /*
