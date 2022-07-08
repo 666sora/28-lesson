@@ -1,5 +1,6 @@
 #include <iostream>
 #include <vector>
+#include <map>
 #include <string>
 #include <thread>
 #include <chrono>
@@ -14,85 +15,97 @@ enum Food {
     SUSHI
 };
 
-Food returnFood(int foodInt) {
-    switch (foodInt) {
-        case 0: return PIZZA;
-        case 1: return SOUP;
-        case 2: return STEAK;
-        case 3: return SALAD;
-        case 4: return SUSHI;
-    }
-    return {};
-}
-
-std::string returnStringFood(Food food) {
-    switch (food) {
-        case 0: return "pizza";
-        case 1: return "soup";
-        case 2: return "steak";
-        case 3: return "salad";
-        case 4: return "sushi"; 
-    }
-    return {};
-}
+std::map<int,std::pair<Food, std::string>> orderFood{
+        {0, {PIZZA,"pizza"} },
+        {1, {SOUP, "soup"} },
+        {2, {STEAK, "steak"} },
+        {3, {SALAD, "salad"} },
+        {4, {SUSHI, "sushi"} }
+};
 
 class OnlineDelivery {
-    std::vector<Food> uncookedFood;
-    std::vector<Food> cookedFood;
+    std::vector<std::pair<Food, std::string>> uncookedFood;
+    std::vector<std::pair<Food, std::string>> cookedFood;
 
     int successOrder = 0;
 
     std::mutex mtx1;
     std::mutex mtx2;
+    std::mutex mtx3;
 
 public:
     void getOrder() {
-        while (successOrder < 10) {
+        
+        while (true) {
+            mtx3.lock();
+            if (successOrder > 10) {
+                mtx3.unlock();
+                break;
+            }
+            mtx3.unlock();
+
             std::srand(std::time(nullptr));
             std::this_thread::sleep_for(std::chrono::seconds(std::rand() % 6 + 5));
 
             mtx1.lock();
-            Food tempFood = returnFood(std::rand() % 5);
+            std::pair<Food, std::string> tempFood = orderFood[std::rand() % 5];
             uncookedFood.push_back(tempFood);
-            std::cout << returnStringFood(tempFood) << " was ordered" << std::endl;
+            std::cout << tempFood.second << " was ordered" << std::endl;
             mtx1.unlock();
         }
     }
 
     void cookOrder() {
-        while (successOrder < 10) {
+        while (true) {
+            mtx3.lock();
+            if (successOrder > 10) {
+                mtx3.unlock();
+                break;
+            }
+            mtx3.unlock();
+
             mtx1.lock();
             if (uncookedFood.empty()) {
                 mtx1.unlock();
                 continue;
             } 
             std::this_thread::sleep_for(std::chrono::seconds(std::rand() % 11 + 5));
-            Food tempFood = uncookedFood[0];
+            std::pair<Food, std::string> tempFood = uncookedFood[0];
             uncookedFood.erase(uncookedFood.begin());
             mtx1.unlock();
 
             mtx2.lock();
             cookedFood.push_back(tempFood);
-            std::cout << returnStringFood(tempFood) << " was cooked" << std::endl;
+            std::cout << tempFood.second << " was cooked" << std::endl;
             mtx2.unlock();
         }
     }
 
     void deliveryOrders() {
-        while (successOrder < 10) {
+        while (true) {
+            mtx3.lock();
+            if (successOrder > 10) {
+                mtx3.unlock();
+                break;
+            }
+            mtx3.unlock();
+
             mtx2.lock();
             if (cookedFood.empty()) {
                 mtx2.unlock();
                 continue;
             }
-            std::vector<Food> tempVec = cookedFood;
+            std::vector<std::pair<Food, std::string>> tempVec = cookedFood;
             cookedFood.clear();
             mtx2.unlock();
 
             std::this_thread::sleep_for(std::chrono::seconds(30));
             for (int i = 0; i < tempVec.size(); i++) {
-                std::cout << returnStringFood(tempVec[i]) << " was delivered" << std::endl;
+                std::cout << tempVec[i].second << " was delivered" << std::endl;
+                
+                mtx3.lock();
                 successOrder++;
+                mtx3.unlock();
             }
         }
     }
